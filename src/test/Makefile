@@ -30,7 +30,8 @@ CPPFLAGS += -isystem $(GTEST_DIR)/include -I$(PYTHON_DIR) -I$(USER_DIR) -g -O0
 
 # All tests produced by this Makefile.  Remember to add new tests you
 # created to the list.
-TESTS = bz2search_test
+BUILDDIR = build
+TESTS = $(BUILDDIR)/bz2search_test
 
 # All Google Test headers.  Usually you shouldn't change this
 # definition.
@@ -42,7 +43,7 @@ GTEST_HEADERS = $(GTEST_DIR)/include/gtest/*.h \
 all : $(TESTS)
 
 clean :
-	rm -f $(TESTS) gtest.a gtest_main.a *.o
+	rm -f $(TESTS) $(BUILDDIR)/gtest.a $(BUILDDIR)/gtest_main.a $(BUILDDIR)/*.o
 
 # Builds gtest.a and gtest_main.a.
 
@@ -50,33 +51,31 @@ clean :
 # trailing _.
 GTEST_SRCS_ = $(GTEST_DIR)/src/*.cc $(GTEST_DIR)/src/*.h $(GTEST_HEADERS)
 
+$(BUILDDIR) :
+	mkdir $(BUILDDIR)
 # For simplicity and to avoid depending on Google Test's
 # implementation details, the dependencies specified below are
 # conservative and not optimized.  This is fine as Google Test
 # compiles fast and for ordinary users its source rarely changes.
-gtest-all.o : $(GTEST_SRCS_)
+$(BUILDDIR)/gtest-all.o : $(GTEST_SRCS_)
 	$(CXX) $(CPPFLAGS) -I$(GTEST_DIR) $(CXXFLAGS) -c \
-            $(GTEST_DIR)/src/gtest-all.cc
+            $(GTEST_DIR)/src/gtest-all.cc -o $@
 
-gtest_main.o : $(GTEST_SRCS_)
+$(BUILDDIR)/gtest_main.o : $(GTEST_SRCS_)
 	$(CXX) $(CPPFLAGS) -I$(GTEST_DIR) $(CXXFLAGS) -c \
-            $(GTEST_DIR)/src/gtest_main.cc
+            $(GTEST_DIR)/src/gtest_main.cc -o $@
 
-gtest.a : gtest-all.o
+$(BUILDDIR)/gtest.a : $(BUILDDIR)/gtest-all.o
 	$(AR) $(ARFLAGS) $@ $^
 
-gtest_main.a : gtest-all.o gtest_main.o
+$(BUILDDIR)/gtest_main.a : $(BUILDDIR)/gtest-all.o $(BUILDDIR)/gtest_main.o
 	$(AR) $(ARFLAGS) $@ $^
-
-# Builds a sample test.  A test should link with either gtest.a or
-# gtest_main.a, depending on whether it defines its own main()
-# function.
 
 # bz2search.o : $(USER_DIR)/bz2search.c $(USER_DIR)/microbunzip.h $(GTEST_HEADERS)
 # 	$(CC) $(CPPFLAGS) $(CXXFLAGS) -c $(USER_DIR)/bz2search.c
 
-microbunzip.o : $(USER_DIR)/bz2search.c $(GTEST_HEADERS)
-	$(CC) $(CPPFLAGS) $(CXXFLAGS) -c $(USER_DIR)/microbunzip.c
+$(BUILDDIR)/microbunzip.o : $(USER_DIR)/bz2search.c $(GTEST_HEADERS)
+	$(CC) $(CPPFLAGS) $(CXXFLAGS) -c $(USER_DIR)/microbunzip.c -o $@
 
 # bz2search_test.o : $(USER_DIR)/test/bz2search_test.cc \
 #                      $(USER_DIR)/microbunzip.h $(GTEST_HEADERS)
@@ -85,6 +84,6 @@ microbunzip.o : $(USER_DIR)/bz2search.c $(GTEST_HEADERS)
 # bz2search_test : bz2search.o microbunzip.o bz2search_test.o gtest_main.a
 # 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -lpython -lpthread $^ -o $@
 
-bz2search_test : gtest_main.a microbunzip.o
+$(BUILDDIR)/bz2search_test : $(BUILDDIR)/gtest_main.a $(BUILDDIR)/microbunzip.o
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -lpython -lpthread bz2search_test.cc $^ -o $@
 

@@ -14,14 +14,14 @@ class PyTest(TestCommand):
         import pytest
         pytest.main(self.test_args)
 
-setup(name='filebinsearch',
+setup(name='logbinsearch',
       version='0.0.1',
       description='',
       author='takada-at',
       author_email='takada-at@klab.com',
       packages=find_packages(),
       ext_modules=[
-          Extension('filebinsearch.bz2search', 
+          Extension('logbinsearch.bz2search', 
                     ['src/bz2search.c', 'src/microbunzip.c']),
       ],
     tests_require=['pytest'],

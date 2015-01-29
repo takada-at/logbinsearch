@@ -14,6 +14,7 @@ typedef struct {
     PyObject_HEAD
     long startpos;
     bunzip_data *bd;
+    int end;
 } BlockReader;
 
 typedef struct
@@ -63,28 +64,6 @@ mbz2_error(int status)
 /**
  * BlockReader
  */
-static PyObject*
-Reader_iternext(BlockReader *self)
-{
-   int gotcount;
-   char *outbuff;
-   outbuff = (char *)PyMem_Malloc(sizeof(char) * BUF_SIZE);
-   if(outbuff == NULL){
-        PyErr_NoMemory();
-        return NULL;
-   }
-   gotcount = read_bunzip(self->bd, outbuff, BUF_SIZE);
-   if(gotcount < 0){
-       // error
-       mbz2_error(gotcount);
-       PyMem_Free(outbuff);
-       return NULL;
-   }
-   else{
-       return PyString_FromString(outbuff);
-   }
-}
-
 static int bz2s_seek(bunzip_data *bd, int fd, long pos)
 {
     off_t bytes; char bit;
@@ -99,6 +78,55 @@ static int bz2s_seek(bunzip_data *bd, int fd, long pos)
     bd->inbufBitCount = bd->inbufPos = bd->inbufCount = 0;
     get_bits(bd, bit);
     return (int)pos;
+}
+static PyObject*
+Reader_reset(BlockReader *self)
+{
+    self->end = 0;
+    bz2s_seek(self->bd, self->bd->in_fd, self->startpos);
+    Py_RETURN_NONE;
+}
+static PyObject*
+Reader_iternext(BlockReader *self)
+{
+    if(self->end)
+        return NULL;
+    bunzip_data *bd = self->bd;
+    char *line, *buff, *end;
+    int gotcount;
+    int errorstatus = 0;
+    int readcount = 0;
+    char c;
+    line = (char *)PyMem_Malloc(sizeof(char) * BUF_SIZE);
+    if(line==NULL){
+        PyErr_NoMemory();
+        return NULL;
+    }
+    buff = line;
+    end  = buff + BUF_SIZE;
+    Py_BEGIN_ALLOW_THREADS
+    while(buff!=end){
+        gotcount = read_bunzip(bd, &c, 1);
+        if(gotcount==0){
+            self->end = 1; break;
+        }else if(gotcount==-1){
+            self->end = 1; break;
+        }else if(gotcount < 0){
+            errorstatus = gotcount; break;
+        }
+        ++readcount;
+        *buff++ = c;
+        if(c=='\n') break;
+    }
+    Py_END_ALLOW_THREADS
+    if(errorstatus<0){
+        mbz2_error(errorstatus);
+        return NULL;
+    }
+    if(readcount==0){
+        return NULL;
+    }
+    return PyString_FromStringAndSize(line, readcount);
 }
 
 static int bz2s_initBlock(BlockReader *self, int fd, long pos)
@@ -115,6 +143,7 @@ static int bz2s_initBlock(BlockReader *self, int fd, long pos)
         bd->writeCopies = 0;
         self->bd = bd;
         self->startpos = pos;
+        self->end = 0;
         return 0;
     }else{
         mbz2_error(status);
@@ -184,6 +213,7 @@ PyDoc_STRVAR(BlockReader_Type_doc,
 );
 
 static struct PyMethodDef Reader_methods[] = {
+    {"reset", (PyCFunction)Reader_reset,  METH_NOARGS, "seek to start point"},
     { NULL, NULL }
 };
 
@@ -269,6 +299,7 @@ static long bz2s_searchBlock(FILE* file, long pos)
     while(1){
         b = getBits(bs);
         if (b>=2){
+            PyMem_Free(bs);
             return -1;
         }
         ++readbit;
