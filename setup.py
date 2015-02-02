@@ -24,7 +24,8 @@ setup(name='logbinsearch',
           Extension('logbinsearch.bz2search', 
                     ['src/bz2search.c', 'src/microbunzip.c']),
       ],
-    tests_require=['pytest'],
-    cmdclass = {'test': PyTest},
+      tests_require=['pytest'],
+      cmdclass = {'test': PyTest},
+      scripts=['scripts/logdatetimesearch'],
 )
 
