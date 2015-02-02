@@ -27,38 +27,13 @@ typedef struct
 static int
 mbz2_error(int status)
 {
-    switch(status){
-    case RETVAL_OK:
+    if(status==RETVAL_OK)
         return 0;
-    case RETVAL_LAST_BLOCK:
-        PyErr_Format(error_obj,
-                     "unexpected end of data");
-        return -1;
-    case RETVAL_NOT_BZIP_DATA:
-        PyErr_Format(error_obj,
-                     "not bzip data");
-        return -1;
-    case RETVAL_UNEXPECTED_INPUT_EOF:
-        PyErr_Format(error_obj,
-                     "unexpected input eof");
-        return -1;
-    case RETVAL_UNEXPECTED_OUTPUT_EOF:
-        PyErr_Format(error_obj,
-                     "unexpected output eof");
-        return -1;
-    case RETVAL_DATA_ERROR:
-        PyErr_Format(error_obj,
-                     "data error");
-        return -1;
-    case RETVAL_OUT_OF_MEMORY:
-        PyErr_NoMemory();
-        return -1;
-    case RETVAL_OBSOLETE_INPUT:
-        PyErr_Format(error_obj,
-                     "obsolete input");
-        return -1;
-    }
-    return 0;
+
+    char *error = bunzip_errors[-status];
+    PyErr_Format(error_obj,
+                 error);
+    return -1;
 }
 
 /**
@@ -120,10 +95,12 @@ Reader_iternext(BlockReader *self)
     }
     Py_END_ALLOW_THREADS
     if(errorstatus<0){
+        PyMem_Free(line);
         mbz2_error(errorstatus);
         return NULL;
     }
     if(readcount==0){
+        PyMem_Free(line);
         return NULL;
     }
     return PyString_FromStringAndSize(line, readcount);
@@ -135,10 +112,11 @@ static int bz2s_initBlock(BlockReader *self, int fd, long pos)
     int status;
     if ( ( status = start_bunzip( &bd, fd, 0, 0 ) )==0 ){
         bz2s_seek(bd, fd, pos);
+        /*
         if ( ( status = get_next_block( bd ) ) ){
             mbz2_error(status);
             return -1;
-        }
+            }*/
         bd->writeCRC = 0xffffffffUL;
         bd->writeCopies = 0;
         self->bd = bd;
@@ -280,7 +258,7 @@ static int getBits(BitStream* bs)
    }
 }
 
-static long bz2s_searchBlock(FILE* file, long pos)
+static off_t bz2s_searchBlock(FILE* file, off_t pos)
 {
     int b;
     int readbuff = 0;
@@ -295,32 +273,47 @@ static long bz2s_searchBlock(FILE* file, long pos)
     bs->file = file;
     bs->buffer = 0;
     bs->buffsize = 0;
-    fseek(file, pos, SEEK_SET);
+    if(fseek(file, pos, SEEK_SET)){
+        PyErr_Format(error_obj,
+                     "fseek error");
+        return -1;
+    }
     while(1){
         b = getBits(bs);
         if (b>=2){
-            PyMem_Free(bs);
-            return -1;
+            searchpos = -1;
+            break;
         }
         ++readbit;
+        if(readbit < pos*8){
+            continue;
+        }
         readbuff = (readbuff << 1) | (b & 1);
         if (state == 0 && (readbuff & 0x00ffffff) == BLOCK_HEADER0){
+            //printf("readbuff1: %ld\n", readbuff& 0x00ffffff);
             state = 1;
-        }else if(state==1 && (readbuff & 0x00ffffff) == BLOCK_HEADER1){
+        }else if(state>=1 && state < 24){
+            ++state;
+        }else if(state==24){
+            //printf("state=25, readbuf:%ld, readbit: %ld\n", readbuff, pos * 8 + readbit - 48);
+            //printf("pos: %ld, readbit: %ld\n", pos, readbit);
+            //printf("pos: %d\n", ftell(file)*8 - bs->buffsize);
             state = 0;
-            searchpos = readbit / 8;
-            PyMem_Free(bs);
-            return pos * 8 + readbit - 48;
+            if((readbuff & 0x00ffffff) == BLOCK_HEADER1){
+                //printf("readbuff2: %ld\n", readbuff& 0x00ffffff);
+                searchpos = pos * 8 + readbit - 48;
+                break;
+            }
         }
     }
     PyMem_Free(bs);
-    return -1;
+    return searchpos;
 }
 
 static PyObject* pybz2s_searchBlock(PyObject *self, PyObject *args)
 {
     PyObject *pyfile = NULL;
-    long pos = 0;
+    off_t pos = 0;
     FILE *file;
     long block;
     if (!PyArg_ParseTuple(args, "O|l", &pyfile, &pos)){

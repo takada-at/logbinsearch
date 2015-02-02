@@ -417,7 +417,7 @@ int read_bunzip(bunzip_data *bd, char *outbuf, int len)
 	int pos,current,previous,gotcount;
 
 	/* If last read was short due to end of file, return last block now */
-	if(bd->writeCount<0) return bd->writeCount;
+    if(bd->writeCount<0) return bd->writeCount;
 
 	gotcount = 0;
 	dbuf=bd->dbuf;
