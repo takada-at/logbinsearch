@@ -1,48 +1,73 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import, division, print_function, unicode_literals
 import csv
-import itertools
 import os
 import traceback
 DEBUG = 1
 TRY_TIMES = 30
-class Comparator(object):
-    def __init__(self, col, colupper=None, delimiter=b"\t", quotechar=b"\"",
-                 comparefunc=None, lower=None, upper=None, valtype=str):
+
+
+class Reader(object):
+    def __init__(self, col, colupper=None, delimiter=b"\t", quotechar=b"\"", valtype=str):
         self.col  = col
         if colupper is None or col > colupper:
             colupper = col
-        if comparefunc is None:
-            comparefunc = self._compare_value
         self.delimiter = delimiter
         self.quotechar = quotechar
         self.colupper = colupper + 1
+        self.valtype = valtype
+    def setfile(self, fileobj):
+        self.parser = csv.reader(fileobj, delimiter=self.delimiter, quotechar=self.quotechar)
+        return self.parser
+    def __iter__(self):
+        return self
+    def get_value(self, rows):
+        return self.valtype(self.delimiter.join(rows[self.col:self.colupper]))
+    def next(self):
+        row = self.parser.next()
+        val = self.get_value(row)
+        return val, row
+
+class Comparator(object):
+    def __init__(self, lower=None, upper=None):
         self.lower = lower
         self.upper = upper
-        self.valtype = valtype
-        self.comparefunc = comparefunc
-    def make_parser(self, reader):
-        return csv.reader(reader, delimiter=self.delimiter, quotechar=self.quotechar)
-    def _compare_value(self, rows):
+    def compare(self, val):
         lower = self.lower
         upper = self.upper
-        val = self.valtype(self.delimiter.join(rows[self.col:self.colupper]))
-        #print(lower, val, upper)
-        if lower <= val < upper:
+        if lower <= val <= upper:
             return 0
-        elif val >= upper:
+        elif val > upper:
             return -1
         return 1
-    def compare(self, reader):
-        self.buffer = []
-        parser = self.make_parser(reader)
-        self.parser = parser
+
+class BaseBinSearch(object):
+    def __init__(self, filepath, comparator, reader):
+        self.filepath   = filepath
+        self.comparator = comparator
+        self.reader     = reader
+        self.fio        = None
+        self.buffer     = []
+    def __enter__(self):
+        filesize = os.path.getsize(self.filepath)
+        self.fio = open(self.filepath)
+        return self._binsearch(filesize, self.fio, self.comparator, self.reader)
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self.fio:
+            self.fio.close()
+            self.fio = None
+
+        if exc_value is None:
+            return True
+    def try_compare(self, fio, reader, comparator):
+        parser = reader.setfile(fio)
         for i in range(TRY_TIMES):
             try:
-                rows = parser.next()
-                res = self.comparefunc(rows)
+                row = parser.next()
+                val = reader.get_value(row)
+                res = comparator.compare(val)
                 if res==0:
-                    self.buffer.append(rows)
+                    self.buffer.append(row)
                 return res
             except StopIteration:
                 return None
@@ -51,41 +76,35 @@ class Comparator(object):
                     print(traceback.format_exc())
 
         return None
-    def results(self):
-        return itertools.chain(self.buffer, self.parser)
-    def __repr__(self):
-        s = self
-        return "Comparator<{}:{} '{}' {}--{}>".format(s.col, s.colupper, s.delimiter,
-                                                     s.lower, s.upper)
+    def _iter_results(self, input_):
+        if not self.buffer:
+            raise StopIteration()
 
-class BaseBinSearch(object):
-    def __init__(self, filepath, comparator):
-        self.filepath = filepath
-        self.comparator = comparator
-        self.fio = None
-    def __enter__(self):
-        filesize = os.path.getsize(self.filepath)
-        self.fio = open(self.filepath)
-        return self._binsearch(filesize, self.fio, self.comparator)
-    def __exit__(self, exc_type, exc_value, traceback):
-        if self.fio:
-            self.fio.close()
-            self.fio = None
+        for row in self.buffer:
+            yield row
 
-        if exc_value is None:
-            return True
-    def _binsearch(self, filesize, fio, comparator):
+        self.reader.setfile(input_)
+        comparator = self.comparator
+        for val, row in self.reader:
+            res = comparator.compare(val)
+            if res == 0:
+                yield row
+            else:
+                break
+
+    def _binsearch(self, filesize, fio, comparator, reader):
         raise NotImplementedError()
 
 class TextBinSearch(BaseBinSearch):
-    def _binsearch(self, filesize, fio, comparator):
+    def _binsearch(self, filesize, fio, comparator, reader):
         half = filesize // 2
         start = 0
         size = half
         while size > 100:
             fio.seek(half)
             fio.next()
-            result = comparator.compare(fio)
+
+            result = self.try_compare(fio, reader, comparator)
             if result is None:
                 return None
             if result==0: #in
@@ -98,4 +117,4 @@ class TextBinSearch(BaseBinSearch):
             size = size // 2
             half = start + size
 
-        return comparator.results()
+        return self._iter_results(fio)

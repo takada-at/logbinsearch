@@ -12,9 +12,11 @@ static PyObject *error_obj;     /*  exception */
 
 typedef struct {
     PyObject_HEAD
+    PyFileObject *file;
     long startpos;
     bunzip_data *bd;
     int end;
+    long pos;
 } BlockReader;
 
 typedef struct
@@ -30,9 +32,21 @@ mbz2_error(int status)
     if(status==RETVAL_OK)
         return 0;
 
-    char *error = bunzip_errors[-status];
-    PyErr_Format(error_obj,
-                 error);
+    if(status==RETVAL_LAST_BLOCK){
+        PyErr_Format(error_obj, "Bad file checksum");
+    }else if(status==RETVAL_NOT_BZIP_DATA){
+        PyErr_Format(error_obj, "Not bzip data");
+    }else if(status==RETVAL_UNEXPECTED_INPUT_EOF){
+        PyErr_Format(error_obj, "Unexpected input EOF");
+    }else if(status==RETVAL_UNEXPECTED_OUTPUT_EOF){
+        PyErr_Format(error_obj, "Unexpected output EOF");
+    }else if(status==RETVAL_DATA_ERROR){
+        PyErr_Format(error_obj, "Data error");
+    }else if(status==RETVAL_OUT_OF_MEMORY){
+        PyErr_Format(error_obj, "Out of memory");
+    }else if(status==RETVAL_OBSOLETE_INPUT){
+        PyErr_Format(error_obj, "Obsolete (pre 0.9.5) bzip format not supported.");
+    }
     return -1;
 }
 
@@ -54,12 +68,15 @@ static int bz2s_seek(bunzip_data *bd, int fd, long pos)
     get_bits(bd, bit);
     return (int)pos;
 }
+static char *block_kws[] = {
+    "file",
+    "pos",
+    NULL
+};
 static PyObject*
-Reader_reset(BlockReader *self)
+Reader_tell(BlockReader *self)
 {
-    self->end = 0;
-    bz2s_seek(self->bd, self->bd->in_fd, self->startpos);
-    Py_RETURN_NONE;
+    return Py_BuildValue("i", self->pos);
 }
 static PyObject*
 Reader_iternext(BlockReader *self)
@@ -89,6 +106,7 @@ Reader_iternext(BlockReader *self)
         }else if(gotcount < 0){
             errorstatus = gotcount; break;
         }
+        ++self->pos;
         ++readcount;
         *buff++ = c;
         if(c=='\n') break;
@@ -121,6 +139,7 @@ static int bz2s_initBlock(BlockReader *self, int fd, long pos)
         bd->writeCopies = 0;
         self->bd = bd;
         self->startpos = pos;
+        self->pos      = pos;
         self->end = 0;
         return 0;
     }else{
@@ -129,11 +148,6 @@ static int bz2s_initBlock(BlockReader *self, int fd, long pos)
     }
     return 0;
 }
-static char *block_kws[] = {
-    "file",
-    "pos",
-    NULL
-};
 static int
 Reader_init(BlockReader *self, PyObject *args, PyObject *kwargs)
 {
@@ -150,6 +164,7 @@ Reader_init(BlockReader *self, PyObject *args, PyObject *kwargs)
         return -1;
     }
     file = PyFile_AsFile(pyfile);
+    self->file = (PyFileObject*)pyfile;
     int fd = fileno(file);
     if(fd < 0){
         PyErr_Format(error_obj,
@@ -164,6 +179,56 @@ Reader_init(BlockReader *self, PyObject *args, PyObject *kwargs)
     }
     self->bd = NULL;
     return bz2s_initBlock(self, fd, pos);
+}
+static int
+bz2s_reset(BlockReader *self, PyObject *pyfile, long pos)
+{
+    FILE *file;
+    file = PyFile_AsFile(pyfile);
+    self->file = (PyFileObject*)pyfile;
+    int fd = fileno(file);
+    if(fd < 0){
+        PyErr_Format(error_obj,
+                     "fileno error");
+        return -1;
+    }
+    if(lseek( fd, 0, SEEK_SET ) != 0)
+    {
+        PyErr_Format(error_obj,
+                     "lseek error");
+        return -1;
+    }
+    self->bd = NULL;
+    if(bz2s_initBlock(self, fd, pos)<0){
+        return -1;
+    }
+    return 0;
+}
+static PyObject*
+Reader_reset(BlockReader *self, PyObject *args, PyObject *kwargs)
+{
+    PyObject *pyfile = NULL;
+    long pos = 0;
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|l", block_kws, 
+                                     &pyfile, &pos)){
+        return NULL;
+    }
+    if (!PyFile_Check(pyfile)){
+        PyErr_Format(PyExc_TypeError,
+                     "file must be file object");
+        return NULL;
+    }
+    if (self->bd != NULL){
+        if ( self->bd->dbuf ) PyMem_Free( self->bd->dbuf );
+        PyMem_Free(self->bd);
+    }
+    if(self->file != NULL){
+        self->file = NULL;
+    }
+    if(bz2s_reset(self, pyfile, pos)){
+        return NULL;
+    }
+    Py_RETURN_NONE;
 }
 static PyObject *
 Reader_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
@@ -183,6 +248,9 @@ Reader_dealloc(BlockReader *self)
         if ( self->bd->dbuf ) PyMem_Free( self->bd->dbuf );
         PyMem_Free(self->bd);
     }
+    if(self->file != NULL){
+        self->file = NULL;
+    }
     self->ob_type->tp_free((PyObject*)self);
 }
 
@@ -191,7 +259,8 @@ PyDoc_STRVAR(BlockReader_Type_doc,
 );
 
 static struct PyMethodDef Reader_methods[] = {
-    {"reset", (PyCFunction)Reader_reset,  METH_NOARGS, "seek to start point"},
+    {"reset", (PyCFunction)Reader_reset,   METH_VARARGS | METH_KEYWORDS, "reset file and position"},
+    {"reset", (PyCFunction)Reader_tell,   METH_NOARGS, "tell file position"},
     { NULL, NULL }
 };
 
@@ -258,7 +327,7 @@ static int getBits(BitStream* bs)
    }
 }
 
-static off_t bz2s_searchBlock(FILE* file, off_t pos)
+static long bz2s_searchBlock(FILE* file, long pos)
 {
     int b;
     int readbuff = 0;
@@ -313,7 +382,7 @@ static off_t bz2s_searchBlock(FILE* file, off_t pos)
 static PyObject* pybz2s_searchBlock(PyObject *self, PyObject *args)
 {
     PyObject *pyfile = NULL;
-    off_t pos = 0;
+    long pos = 0;
     FILE *file;
     long block;
     if (!PyArg_ParseTuple(args, "O|l", &pyfile, &pos)){

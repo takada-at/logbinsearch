@@ -119,6 +119,10 @@ TEST(BZ2SearchTest2, Test1)
     ASSERT_NE((bunzip_data*)NULL, self->bd);
     p = Reader_iternext(self);
     ASSERT_NE((PyObject*)NULL, p);
+
+    PyObject *pyfile = PyFile_FromFile(fp, SAMPLE2, "r", fclose);
+    res = bz2s_reset(self, pyfile, 0);
+    ASSERT_EQ(0, res);
 }
 
 int main(int argc, char **argv) {

@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import argparse
 import datetime
 import os
 import random
-import tempfile
 import bz2
 from ..scripts import logdatetimesearch
 from .. import binsearch
@@ -38,7 +36,7 @@ def test_search():
 
     fromdate = datetime.datetime(2015, 1, 20, 13, 0, 0)
     sample = generate(fromdate)
-    logdatetimesearch.print = mock
+    logdatetimesearch.info = mock
     import sys
     sys.argv = ['logdatetimesearch.py', '-f', '2015-01-20 15:10:00', '-t', '2015-01-20 15:20:00', sample]
     logdatetimesearch.main()
