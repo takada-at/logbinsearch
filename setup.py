@@ -18,10 +18,12 @@ shortdesc = "search (bz2)log file with binary search"
 
 with open(os.path.join(os.path.dirname(__file__), "README.md")) as fd:
     longdesc = fd.read()
+with open(os.path.join(os.path.dirname(__file__), "VERSION")) as fd:
+    version = fd.read()
 setup(name='logbinsearch',
-      version='0.0.1',
       description=shortdesc,
       long_description=longdesc,
+      version=version,
       author='takada-at',
       author_email='takada-at@klab.com',
       packages=find_packages(),
