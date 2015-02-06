@@ -21,7 +21,7 @@ with open(os.path.join(os.path.dirname(__file__)), "README.md") as fd:
 setup(name='logbinsearch',
       version='0.0.1',
       description=shortdesc,
-      ong_description=longdesc,
+      long_description=longdesc,
       author='takada-at',
       author_email='takada-at@klab.com',
       packages=find_packages(),
@@ -31,6 +31,7 @@ setup(name='logbinsearch',
       ],
       tests_require=['pytest'],
       cmdclass = {'test': PyTest},
+      url = "https://github.com/takada-at/logbinsearch",
       scripts=['scripts/logdatetimesearch'],
 )
 
