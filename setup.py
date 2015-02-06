@@ -2,7 +2,7 @@
 from __future__ import absolute_import, division, print_function
 
 from setuptools import setup, find_packages, Extension
-
+import os
 from setuptools.command.test import test as TestCommand
 
 class PyTest(TestCommand):
@@ -14,9 +14,14 @@ class PyTest(TestCommand):
         import pytest
         pytest.main(self.test_args)
 
+shortdesc = "search (bz2)log file with binary search"
+
+with open(os.path.join(os.path.dirname(__file__)), "README.md") as fd:
+    longdesc = fd.read()
 setup(name='logbinsearch',
       version='0.0.1',
-      description='',
+      description=shortdesc,
+      ong_description=longdesc,
       author='takada-at',
       author_email='takada-at@klab.com',
       packages=find_packages(),

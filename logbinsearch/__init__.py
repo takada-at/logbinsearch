@@ -4,11 +4,13 @@ import os
 from .binsearch import Reader, Comparator, TextBinSearch
 from .bz2bin import BZ2BinSearch
 
-def create_searcher(filepath, col, colupper=None, delimiter=b"\t", quotechar=b"\"", valtype=str, lower=None, upper=None):
+def create_searcher(filepath, col, colupper=None, delimiter=b"\t", quotechar=b"\"", valtype=str, lower=None, upper=None, ext=None):
     if not os.path.exists(filepath):
         raise Exception('cannot found: {}'.format(filepath))
 
-    base, ext = os.path.splitext(filepath)
+    if ext is None:
+        base, ext = os.path.splitext(filepath)
+
     if ext=='.bz2':
         searcher = BZ2BinSearch
     else:
