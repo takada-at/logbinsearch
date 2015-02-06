@@ -16,7 +16,7 @@ class PyTest(TestCommand):
 
 shortdesc = "search (bz2)log file with binary search"
 
-with open(os.path.join(os.path.dirname(__file__)), "README.md") as fd:
+with open(os.path.join(os.path.dirname(__file__), "README.md")) as fd:
     longdesc = fd.read()
 setup(name='logbinsearch',
       version='0.0.1',
