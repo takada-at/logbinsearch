@@ -49,10 +49,10 @@ class BZ2BinSearch(BaseBinSearch):
                     result = self.try_compare(blreader, reader, comparator)
                     if result is None: #error
                         return None
-                    if result == 0: #found
-                        #result.reset()
-                        break
-                    elif result < 0:
+                    if result == 0: #in
+                        #too large
+                        pass
+                    elif result <= 0:
                         #too large
                         pass
                     else:
