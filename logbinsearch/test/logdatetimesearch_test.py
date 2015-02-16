@@ -16,14 +16,14 @@ def generate(fromdate):
 
     bzf = bz2.BZ2File(sample, 'w', compresslevel=1)
     ptr = fromdate
-    for i in range(100):
-        for j in range(10):
+    for i in range(200):
+        for j in range(30):
             rows = [i*10 + j, ptr.strftime('%Y-%m-%d %H:%M:%S')] \
                 + [random.randint(0, 100)]*10
             line = " ".join(map(bytes, rows)) + "\n"
             bzf.write(bytes(line))
 
-        ptr += datetime.timedelta(minutes=random.randint(0, 10))
+        ptr += datetime.timedelta(minutes=2, seconds=10)
 
     return sample
 
@@ -38,14 +38,22 @@ def test_search():
     sample = generate(fromdate)
     logdatetimesearch.info = mock
     import sys
-    sys.argv = ['logdatetimesearch.py', '-f', '2015-01-20 15:10:00', '-t', '2015-01-20 15:20:00', sample]
-    logdatetimesearch.main()
-    for row in results[1:10]:
-        print(row)
-        vals = row[0].split()
-        vals = " ".join(vals[1:3])
-        assert vals>='2015-01-20 15:10'
-        assert vals<='2015-01-20 15:20'
+    def testsearch(fromd, tod):
+        fromds = fromd.strftime('%Y-%m-%d %H:%M:%S')
+        tods   = tod.strftime('%Y-%m-%d %H:%M:%S')
+        sys.argv = ['logdatetimesearch.py', '-f', fromds, '-t', tods, sample]
+        results = []
+        logdatetimesearch.main()
+        for row in results[1:10]:
+            print(row)
+            vals = row[0].split()
+            vals = " ".join(vals[1:3])
+            assert fromds <= vals
+            assert tods >= vals
+
+    fromd0 = datetime.datetime(2015, 1, 20, 16, 0, 0)
+    tod0   = datetime.datetime(2015, 1, 20, 18, 16, 0)
+    testsearch(fromd0, tod0)
 
     reload(logdatetimesearch)
     reload(sys)

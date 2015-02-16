@@ -24,7 +24,6 @@ class BZ2BinSearch(BaseBinSearch):
         try:
             blreader.next()
         except StopIteration:
-            print("stop ", binpos)
             return None
         return blreader
     def _binsearch(self, filesize, fio, comparator, reader):
@@ -74,7 +73,8 @@ class BZ2BinSearch(BaseBinSearch):
             return None
 
         if result==0:
-            return self._iter_results()
+            return self._iter_results(blreader)
+
         return self._binsearchinblock(blreader)
     def _binsearchinblock(self, blreader):
         while True:

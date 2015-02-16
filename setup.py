@@ -29,7 +29,7 @@ setup(name='logbinsearch',
       packages=find_packages(),
       ext_modules=[
           Extension('logbinsearch.bz2search', 
-                    ['src/bz2search.c', 'src/microbunzip.c']),
+                    ['src/bz2search.c', 'src/microbunzip.c'], include_dirs=['src']),
       ],
       tests_require=['pytest'],
       cmdclass = {'test': PyTest},

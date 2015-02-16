@@ -40,6 +40,8 @@ class Comparator(object):
         elif val > upper:
             return -1
         return 1
+    def __repr__(self):
+        return "Comparator({}, {})".format(repr(self.lower), repr(self.upper))
 
 class BaseBinSearch(object):
     def __init__(self, filepath, comparator, reader):
